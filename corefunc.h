@@ -142,7 +142,7 @@ int iosPlayers = 0;
 	void packet_type3(string text);
 	void packet_type6(string text);
 	void packet_unknown(ENetPacket* packet);
-	void OnSendToServer(string address, int port, int userId, int token);
+	void OnSendToServer(string address, int port, int userId, string token);
 	void OnConsoleMessage(string message);
 	void OnPlayPositioned(string sound);
 	void OnSetFreezeState(int state);

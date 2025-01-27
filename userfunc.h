@@ -738,7 +738,7 @@ void GrowtopiaBot::packet_unknown(ENetPacket* packet)
 
 
 
-void GrowtopiaBot::OnSendToServer(string address, int port, int userId, int token)
+void GrowtopiaBot::OnSendToServer(string address, int port, int userId, string token)
 {
     // Pisahkan token dengan pemisah "|"
     std::vector<std::string> parts;
