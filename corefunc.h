@@ -60,7 +60,7 @@ ENetPeer *peer15;
 
 	ENetHost *client;
 	int login_user = 0;
-	int login_token = 0;
+	string login_token = 0;
 
 	string currentWorld;
 	int timeFromWorldEnter = 0; // in 10mss...
