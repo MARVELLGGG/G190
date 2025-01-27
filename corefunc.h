@@ -42,8 +42,23 @@ using json = nlohmann::json;
 class GrowtopiaBot {
 public:
 	ENetPeer *peer;
-	ENetHost * client;
+ENetPeer *peer2;
+ENetPeer *peer3;
+ENetPeer *peer4;
+ENetPeer *peer5;
+ENetPeer *peer6;
+ENetPeer *peer7;
+ENetPeer *peer8;
+ENetPeer *peer9;
+ENetPeer *peer10;
+ENetPeer *peer11;
+ENetPeer *peer12;
+ENetPeer *peer13;
+ENetPeer *peer14;
+ENetPeer *peer15;
 
+
+	ENetHost *client;
 	int login_user = 0;
 	int login_token = 0;
 
@@ -56,7 +71,12 @@ public:
 
 	/********** user sutff ***************/
 	int owner = -1;
+    int number = -1;
 	string ownerUsername;
+     int totalPlayers = 0;
+int pcPlayers = 0;
+int androidPlayers = 0;
+int iosPlayers = 0;
 
 	struct ObjectData
 	{
@@ -72,6 +92,9 @@ public:
 		int rectY; // collision stuff
 		int rectWidth; // collision stuff
 		int rectHeight; // collision stuff
+		int punchX;
+		int punchY;
+	    int packetType;		
 		bool isMod = false;
 		bool isLocal = false;
 	};
@@ -85,6 +108,7 @@ public:
 	string worldName; // excepted world name
 
 	bool isFollowing = false;
+	bool isFollowed = false;
 	bool backwardWalk = false;
 
 	int respawnX;
@@ -93,17 +117,18 @@ public:
 
 	/*********** structs declaration *********/
 	struct PlayerMoving {
-		int netID;
-		float x;
-		float y;
-		int characterState;
-		int plantingTree;
-		float XSpeed;
-		float YSpeed;
-		int punchX;
-		int punchY;
+	int netID;
+	float x;
+	float y;
+	int characterState;
+	int plantingTree;
+	float XSpeed;
+	float YSpeed;
+	int punchX;
+	int punchY;
+    int packetType;
 
-	};
+};
 	/*********** structs declaration *********/
 
 
@@ -111,6 +136,7 @@ public:
 	void userRender();
 	void userRender2();
 	void userLoop();
+	void msgloop();
 	void userInit();
 	void onLoginRequested();
 	void packet_type3(string text);
@@ -122,10 +148,14 @@ public:
 	void OnSetFreezeState(int state);
 	void OnRemove(string data);
 	void OnSpawn(string data);
+	void MoveBotRaw(int deltaX, int deltaY);
+	void ActivateInvisEffect();
+    void InvisibleEffect(int count);
+    void MoveBotRandom(int repeatCount, int offsetX, int offsetY);
 	void OnAction(string command);
 	void SetHasGrowID(int state, string name, string password);
 	void SetHasAccountSecured(int state);
-	void OnTalkBubble(int netID, string bubbleText, int type);
+	void OnTalkBubble(int netID, string bubbleText, int type, int number);
 	void SetRespawnPos(int respawnPos);
 	void OnEmoticonDataChanged(int val1, string emoticons);
 	void OnSetPos(float x, float y);
@@ -169,69 +199,156 @@ public:
 			enet_peer_send(enetPeer, 0, v3);
 		}
 	}
-
+	
 	void SendPacketRaw(int a1, void *packetData, size_t packetDataSize, void *a4, ENetPeer* peer, int packetFlag)
-	{
-		ENetPacket *p;
+{
+	ENetPacket *p;
 
-		if (peer) // check if we have it setup
+	if (peer) // check if we have it setup
+	{
+		if (a1 == 4 && *((BYTE *)packetData + 12) & 8)
 		{
-			if (a1 == 4 && *((BYTE *)packetData + 12) & 8)
-			{
-				p = enet_packet_create(0, packetDataSize + *((DWORD *)packetData + 13) + 5, packetFlag);
-				int four = 4;
-				memcpy(p->data, &four, 4);
-				memcpy((char *)p->data + 4, packetData, packetDataSize);
-				memcpy((char *)p->data + packetDataSize + 4, a4, *((DWORD *)packetData + 13));
-				enet_peer_send(peer, 0, p);
-			}
-			else
-			{
-				p = enet_packet_create(0, packetDataSize + 5, packetFlag);
-				memcpy(p->data, &a1, 4);
-				memcpy((char *)p->data + 4, packetData, packetDataSize);
-				enet_peer_send(peer, 0, p);
-			}
+			p = enet_packet_create(0, packetDataSize + *((DWORD *)packetData + 13) + 5, packetFlag);
+			int four = 4;
+			memcpy(p->data, &four, 4);
+			memcpy((char *)p->data + 4, packetData, packetDataSize);
+			memcpy((char *)p->data + packetDataSize + 4, a4, *((DWORD *)packetData + 13));
+			enet_peer_send(peer, 0, p);
+		}
+		else
+		{
+			p = enet_packet_create(0, packetDataSize + 5, packetFlag);
+			memcpy(p->data, &a1, 4);
+			memcpy((char *)p->data + 4, packetData, packetDataSize);
+			enet_peer_send(peer, 0, p);
 		}
 	}
+	}
 
+	
 	// Connect with default value
 	void connectClient() {
 		connectClient(SERVER_HOST, SERVER_PORT);
 	}
 
 	void connectClient(string hostName, int port)
-	{
-		cout << "Connecting bot to " << hostName << ":" << port << endl;
-		client = enet_host_create(NULL /* create a client host */,
-			1 /* only allow 1 outgoing connection */,
-			2 /* allow up 2 channels to be used, 0 and 1 */,
-			0 /* 56K modem with 56 Kbps downstream bandwidth */,
-			0 /* 56K modem with 14 Kbps upstream bandwidth */);
-		client->usingNewPacket = true;
-		if (client == NULL)
-		{
-			cout << "An error occurred while trying to create an ENet client host.\n";
-			
-			exit(EXIT_FAILURE);
-		}
-		ENetAddress address;
+{
+    cout << "Connecting bot to " << hostName << ":" << port << endl;
+    client = enet_host_create(NULL /* create a client host */,
+        31/* only allow 1 outgoing connection */,
+        10 /* allow up 2 channels to be used, 0 and 1 */,
+        0 /* 56K modem with 56 Kbps downstream bandwidth */,
+        0 /* 56K modem with 14 Kbps upstream bandwidth */);
+    client->usingNewPacket = false;
+    if (client == NULL)
+    {
+        cout << "An error occurred while trying to create an ENet client host.\n";
+        exit(EXIT_FAILURE);
+    }
+    ENetAddress address;
 
-		client->checksum = enet_crc32;
-		enet_host_compress_with_range_coder(client);
-		enet_address_set_host(&address, hostName.c_str());
-		address.port = port;
+    client->checksum = enet_crc32;
+    enet_host_compress_with_range_coder(client);
+    enet_address_set_host(&address, hostName.c_str());
+    address.port = port;
 
-		/* Initiate the connection, allocating the two channels 0 and 1. */
-		peer = enet_host_connect(client, &address, 2, 0);
-		if (peer == NULL)
-		{
-			cout << "No available peers for initiating an ENet connection.\n";
-			
-			exit(EXIT_FAILURE);
-		}
-		enet_host_flush(client);
-	}
+    /* Initiate the connection, allocating the two channels 0 and 1. */
+    peer = enet_host_connect(client, &address, 2, 0);
+    if (peer == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    peer2 = enet_host_connect(client, &address, 10, 0);
+    if (peer2 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    peer3 = enet_host_connect(client, &address, 10, 0);
+    if (peer3 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    peer4 = enet_host_connect(client, &address, 10, 0);
+    if (peer4 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    peer5 = enet_host_connect(client, &address, 10, 0);
+    if (peer5 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    peer6 = enet_host_connect(client, &address, 10, 0);
+    if (peer6 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    peer7 = enet_host_connect(client, &address, 10, 0);
+    if (peer7 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    peer8 = enet_host_connect(client, &address, 10, 0);
+    if (peer8 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    peer9 = enet_host_connect(client, &address, 10, 0);
+    if (peer9 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    peer10 = enet_host_connect(client, &address, 10, 0);
+    if (peer10 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    enet_host_flush(client);
+    peer11 = enet_host_connect(client, &address, 10, 0);
+    if (peer11 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    peer12 = enet_host_connect(client, &address, 10, 0);
+    if (peer12 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    peer13 = enet_host_connect(client, &address, 10, 0);
+    if (peer13 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    peer14 = enet_host_connect(client, &address, 10, 0);
+    if (peer14 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+    enet_host_flush(client);
+    peer15 = enet_host_connect(client, &address, 10, 0);
+    if (peer15 == NULL)
+    {
+        cout << "No available peers for initiating an ENet connection.\n";
+        exit(EXIT_FAILURE);
+    }
+
+    enet_host_flush(client);
+}
+
 	/******************* enet core *********************/
 
 
@@ -298,12 +415,14 @@ public:
 		}
 		return result;
 	}
+	
+
 
 	char* GetTextPointerFromPacket(ENetPacket* packet)
 	{
 		char zero = 0;
 		memcpy(packet->data + packet->dataLength - 1, &zero, 1);
-		return (char*)(packet->data + 4);
+ 	  return (char*)(packet->data + 4);
 	}
 
 	struct OnSendToServerStruct
@@ -361,6 +480,7 @@ public:
 		int netID;
 		string bubbleText;
 		int type;
+                int number;
 	};
 
 	struct SetRespawnPosStruct
@@ -557,7 +677,8 @@ public:
 				else if (action == "OnTalkBubble" && index == 1)
 				{
 					((OnTalkBubbleStruct*)dataStruct)->netID = v;
-				}
+					std::cout << "Setting netID to: " << v << std::endl;
+        		}
 				else if (action == "OnTalkBubble" && index == 3)
 				{
 					((OnTalkBubbleStruct*)dataStruct)->type = v;
@@ -592,6 +713,11 @@ public:
 				{
 					((OnSendToServerStruct*)dataStruct)->userId = v;
 				}
+				else if (action == "OnTalkBubble" && index == 1)
+				{
+					((OnTalkBubbleStruct*)dataStruct)->netID = v;
+					std::cout << "Setting netID to: " << v << std::endl;
+        		}
 				else if (action == "OnEmoticonDataChanged" && index == 1)
 				{
 					((OnEmoticonDataChangedStruct*)dataStruct)->val1 = v;
@@ -713,7 +839,8 @@ public:
 		}
 		else if (action == "OnTalkBubble")
 		{
-			OnTalkBubble(((OnTalkBubbleStruct*)dataStruct)->netID, ((OnTalkBubbleStruct*)dataStruct)->bubbleText, ((OnTalkBubbleStruct*)dataStruct)->type);
+			std::cout << "Calling OnTalkBubble with netID: " << ((OnTalkBubbleStruct*)dataStruct)->netID << std::endl;
+           OnTalkBubble(((OnTalkBubbleStruct*)dataStruct)->netID, ((OnTalkBubbleStruct*)dataStruct)->bubbleText, ((OnTalkBubbleStruct*)dataStruct)->type, ((OnTalkBubbleStruct*)dataStruct)->number);
 		}
 		else if (action == "SetRespawnPos")
 		{
@@ -791,39 +918,40 @@ public:
 		WorldThingStruct* specials;
 	};
 
-	BYTE* packPlayerMoving(PlayerMoving* dataStruct)
+BYTE* packPlayerMoving(PlayerMoving* dataStruct)
+{
+	BYTE* data = new BYTE[56];
+	for (int i = 0; i < 56; i++)
 	{
-		BYTE* data = new BYTE[56];
-		for (int i = 0; i < 56; i++)
-		{
-			data[i] = 0;
-		}
-		memcpy(data + 4, &dataStruct->netID, 4);
-		memcpy(data + 12, &dataStruct->characterState, 4);
-		memcpy(data + 20, &dataStruct->plantingTree, 4);
-		memcpy(data + 24, &dataStruct->x, 4);
-		memcpy(data + 28, &dataStruct->y, 4);
-		memcpy(data + 32, &dataStruct->XSpeed, 4);
-		memcpy(data + 36, &dataStruct->YSpeed, 4);
-		memcpy(data + 44, &dataStruct->punchX, 4);
-		memcpy(data + 48, &dataStruct->punchY, 4);
-		return data;
+		data[i] = 0;
 	}
+	memcpy(data + 4, &dataStruct->netID, 4);
+	memcpy(data + 12, &dataStruct->characterState, 4);
+	memcpy(data + 20, &dataStruct->plantingTree, 4);
+	memcpy(data + 24, &dataStruct->x, 4);
+	memcpy(data + 28, &dataStruct->y, 4);
+	memcpy(data + 32, &dataStruct->XSpeed, 4);
+	memcpy(data + 36, &dataStruct->YSpeed, 4);
+	memcpy(data + 44, &dataStruct->punchX, 4);
+	memcpy(data + 48, &dataStruct->punchY, 4);
+	return data;
+}
 
-	PlayerMoving* unpackPlayerMoving(BYTE* data)
-	{
-		PlayerMoving* dataStruct = new PlayerMoving;
-		memcpy(&dataStruct->netID, data + 4, 4);
-		memcpy(&dataStruct->characterState, data + 12, 4);
-		memcpy(&dataStruct->plantingTree, data + 20, 4);
-		memcpy(&dataStruct->x, data + 24, 4);
-		memcpy(&dataStruct->y, data + 28, 4);
-		memcpy(&dataStruct->XSpeed, data + 32, 4);
-		memcpy(&dataStruct->YSpeed, data + 36, 4);
-		memcpy(&dataStruct->punchX, data + 44, 4);
-		memcpy(&dataStruct->punchY, data + 48, 4);
-		return dataStruct;
-	}
+PlayerMoving* unpackPlayerMoving(BYTE* data)
+{
+	PlayerMoving* dataStruct = new PlayerMoving;
+ 	memcpy(&dataStruct->netID, data + 4, 4);
+	memcpy(&dataStruct->characterState, data + 12, 4);
+	memcpy(&dataStruct->plantingTree, data + 20, 4);
+	memcpy(&dataStruct->x, data + 24, 4);
+	memcpy(&dataStruct->y, data + 28, 4);
+	memcpy(&dataStruct->XSpeed, data + 32, 4);
+	memcpy(&dataStruct->YSpeed, data + 36, 4);
+	memcpy(&dataStruct->punchX, data + 44, 4);
+	memcpy(&dataStruct->punchY, data + 48, 4);
+	return dataStruct;
+}
+
 
 	WorldStruct* world = NULL;
 
@@ -1243,6 +1371,7 @@ public:
 			break;
 		}
 	}
+	
 
 	void eventLoop()
 	{
@@ -1258,7 +1387,7 @@ public:
 				WhenConnected();
 				break;
 			case ENET_EVENT_TYPE_DISCONNECT:
-				WhenDisconnected();
+				WhenDisconnected();	
 				break;
 			case ENET_EVENT_TYPE_RECEIVE:
 				ProcessPacket(&event, peer);
