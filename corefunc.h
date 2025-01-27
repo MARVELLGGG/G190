@@ -430,7 +430,7 @@ int iosPlayers = 0;
 		string address;
 		int port;
 		int userId;
-		int token;
+		string token;
 	};
 
 	struct OnConsoleMessageStruct
