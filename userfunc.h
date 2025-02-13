@@ -24,6 +24,7 @@
 #include <iostream>
 #include <regex>
 #include <iterator>
+#include <curl/curl.h>
 #include <algorithm>
 #include "utilsfunc.h"
 #include "corefunc.h"
@@ -87,6 +88,83 @@ string stripMessage(string msg) {
 	result.erase(std::remove(result.begin(), result.end(), '`'), result.end());
 	return result;
 }
+
+// Fungsi untuk menangkap data dari API response
+size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* output) {
+    size_t totalSize = size * nmemb;
+    output->append((char*)contents, totalSize);
+    return totalSize;
+}
+
+// Fungsi untuk mengirim permintaan GET ke API
+std::string SendGetRequest(const std::string& url) {
+    CURL* curl;
+    CURLcode res;
+    std::string response;
+
+    curl = curl_easy_init();
+    if (curl) {
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L); // Nonaktifkan SSL verification (opsional)
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L); // Ikuti redirect
+
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK) {
+            std::cerr << "cURL Error: " << curl_easy_strerror(res) << std::endl;
+        }
+
+        curl_easy_cleanup(curl);
+    }
+    return response;
+}
+
+// Fungsi untuk melakukan translasi menggunakan Google Translate API
+std::string Translate(const std::string& text, const std::string& targetLang, const std::string& sourceLang = "auto") {
+    CURL* curl;
+    CURLcode res;
+    std::string response;
+
+    curl = curl_easy_init();
+    if (curl) {
+        // URL untuk LibreTranslate API
+        std::string url = "https://libretranslate.com/translate";
+
+        // Data JSON untuk POST
+        std::string postData = "{"
+            "\"q\": \"" + text + "\","
+            "\"source\": \"" + sourceLang + "\","
+            "\"target\": \"" + targetLang + "\","
+            "\"format\": \"text\","
+            "\"alternatives\": 3,"
+            "\"api_key\": \"\""
+        "}";
+
+        struct curl_slist* headers = NULL;
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+
+        // Mengatur opsi cURL
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postData.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+
+        // Melakukan request
+        res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+
+        if (res != CURLE_OK) {
+            return "Error: Failed to fetch translation.";
+        }
+    } else {
+        return "Error: Failed to initialize cURL.";
+    }
+
+    return response;
+}
+
 
 void GrowtopiaBot::onLoginRequested()
 {
@@ -760,43 +838,66 @@ void GrowtopiaBot::OnSendToServer(string address, int port, int userId, string t
     login_user = userId;
 }
 
-
-
-
-
 void GrowtopiaBot::OnConsoleMessage(string message) {
     cout << "Found console message: " << endl;
     string strippedMessage = stripMessage(message);
     cout << strippedMessage << endl;
 
 if (strippedMessage.find("Stats for this node:") != std::string::npos) {
-        std::regex playerRegex(R"(\`\$([0-9]+)\`\` players)");
-        std::regex pcRegex(R"(\(([0-9]+) PC)");
-        std::regex androidRegex(R"(([0-9]+) Android)");
-        std::regex iosRegex(R"(([0-9]+) iOS)");
+    std::regex playerRegex(R"(([0-9]+) players)");
+    std::regex pcRegex(R"(\(([0-9]+) PC)");
+    std::regex androidRegex(R"(([0-9]+) Android)");
+    std::regex iosRegex(R"(([0-9]+) iOS)");
+    std::regex maxPlayersRegex(R"(Max-Players: ([0-9]+)/([0-9]+))");
+  std::regex worldsActiveRegex(R"(([0-9]+) Worlds active)");
+    std::regex serverLoadRegex(R"(Server Load: ([0-9]+))");
 
-        std::smatch match;
+    std::smatch match;
 
-        if (std::regex_search(strippedMessage, match, playerRegex)) {
-            totalPlayers = std::stoi(match[1].str());
-        }
-        if (std::regex_search(strippedMessage, match, pcRegex)) {
-            pcPlayers = std::stoi(match[1].str());
-        }
-        if (std::regex_search(strippedMessage, match, androidRegex)) {
-            androidPlayers = std::stoi(match[1].str());
-        }
-        if (std::regex_search(strippedMessage, match, iosRegex)) {
-            iosPlayers = std::stoi(match[1].str());
-        }
+    // Extract player data
+    if (std::regex_search(strippedMessage, match, playerRegex)) {
+        totalPlayers = std::stoi(match[1].str());
+    }
+    if (std::regex_search(strippedMessage, match, pcRegex)) {
+        pcPlayers = std::stoi(match[1].str());
+    }
+    if (std::regex_search(strippedMessage, match, androidRegex)) {
+        androidPlayers = std::stoi(match[1].str());
+    }
+    if (std::regex_search(strippedMessage, match, iosRegex)) {
+        iosPlayers = std::stoi(match[1].str());
+    }
 
-        // Kirim data ke pemain
-        std::string onlineStats = "Online Players: " + std::to_string(totalPlayers) +
-                                  " (PC: " + std::to_string(pcPlayers) +
-                                  ", Android: " + std::to_string(androidPlayers) +
-                                  ", iOS: " + std::to_string(iosPlayers) + ")";
-        SendPacket(2, "action|input\n|text|" + onlineStats, peer);
-   /* SendPacket(2, "action|input\n|text|" + onlineStats, peer2);
+    // Extract max players
+        if (std::regex_search(strippedMessage, match, maxPlayersRegex)) {
+        maxPlayersCurrent = std::stoi(match[1].str());
+        maxPlayersLimit = std::stoi(match[2].str());
+    }
+
+    // Extract worlds active
+    if (std::regex_search(strippedMessage, match, worldsActiveRegex)) {
+        worldsActive = std::stoi(match[1].str());
+    }
+
+    // Extract server load
+    if (std::regex_search(strippedMessage, match, serverLoadRegex)) {
+        serverLoad = std::stoi(match[1].str());
+    }
+
+    // Create the updated stats message
+    std::string onlineStats = "Online Players: " + std::to_string(totalPlayers) +
+                              " (PC: " + std::to_string(pcPlayers) +
+                              ", Android: " + std::to_string(androidPlayers) +
+                              ", iOS: " + std::to_string(iosPlayers) + ")" +
+                              " Max Players: " + std::to_string(maxPlayersCurrent) + "/" + std::to_string(maxPlayersLimit) +
+                              ", Worlds Active: " + std::to_string(worldsActive) +
+                              ", Server Load: " + std::to_string(serverLoad);
+
+    // Send the data to the players
+    SendPacket(2, "action|input\n|text|" + onlineStats, peer);
+   
+    /* Uncomment and repeat for additional peers
+    SendPacket(2, "action|input\n|text|" + onlineStats, peer2);
     SendPacket(2, "action|input\n|text|" + onlineStats, peer3);
     SendPacket(2, "action|input\n|text|" + onlineStats, peer4);
     SendPacket(2, "action|input\n|text|" + onlineStats, peer5);
@@ -810,8 +911,9 @@ if (strippedMessage.find("Stats for this node:") != std::string::npos) {
     SendPacket(2, "action|input\n|text|" + onlineStats, peer13);
     SendPacket(2, "action|input\n|text|" + onlineStats, peer14);
     SendPacket(2, "action|input\n|text|" + onlineStats, peer15);
-*/
+    */
 }
+
 
     if (strippedMessage.find("MSG") != std::string::npos) {
         cout << "Found message!" << endl;
@@ -968,12 +1070,71 @@ void GrowtopiaBot::SetHasAccountSecured(int state)
 
 }
 
+
+
 void GrowtopiaBot::OnTalkBubble(int netID, string bubbleText, int type, int number)
 {
 	std::cout << "Received netID: " << netID << std::endl;  // Cek nilai netID di sini
 	if (netID != owner) {
    return;
         }
+    
+    if (bubbleText.find("!weather") != string::npos) {
+        std::string location = bubbleText.substr(bubbleText.find("!weather") + 9); // Ambil lokasi setelah "!weather "
+        if (location.empty()) {
+            SendPacket(2, "action|input\n|text|Silakan masukkan nama lokasi. Contoh: !weather Jakarta", peer);
+        } else {
+            // URL API
+            std::string apiKey = "060a6bcfa19809c2cd4d97a212b19273"; // API key Anda
+            std::string apiUrl = "https://api.openweathermap.org/data/2.5/weather?q=" + location + "&units=metric&appid=" + apiKey + "&lang=id";
+
+            // Mengirim permintaan ke API
+            std::string response = SendGetRequest(apiUrl);
+
+            if (response.find("\"cod\":200") != std::string::npos) { // Jika permintaan berhasil
+                // Parsing data JSON manual
+                size_t namePos = response.find("\"name\":\"");
+                size_t weatherPos = response.find("\"main\":\"");
+                size_t descPos = response.find("\"description\":\"");
+                size_t tempPos = response.find("\"temp\":");
+                size_t feelsLikePos = response.find("\"feels_like\":");
+                size_t pressurePos = response.find("\"pressure\":");
+                size_t humidityPos = response.find("\"humidity\":");
+                size_t windSpeedPos = response.find("\"speed\":");
+                size_t lonPos = response.find("\"lon\":");
+                size_t latPos = response.find("\"lat\":");
+                size_t countryPos = response.find("\"country\":\"");
+
+                // Mengambil data dari JSON
+                std::string cityName = response.substr(namePos + 8, response.find("\"", namePos + 8) - (namePos + 8));
+                std::string weatherMain = response.substr(weatherPos + 8, response.find("\"", weatherPos + 8) - (weatherPos + 8));
+                std::string weatherDesc = response.substr(descPos + 15, response.find("\"", descPos + 15) - (descPos + 15));
+                float temp = std::stof(response.substr(tempPos + 7, response.find(",", tempPos) - (tempPos + 7)));
+                float feelsLike = std::stof(response.substr(feelsLikePos + 14, response.find(",", feelsLikePos) - (feelsLikePos + 14)));
+                int pressure = std::stoi(response.substr(pressurePos + 11, response.find(",", pressurePos) - (pressurePos + 11)));
+                int humidity = std::stoi(response.substr(humidityPos + 11, response.find(",", humidityPos) - (humidityPos + 11)));
+                float windSpeed = std::stof(response.substr(windSpeedPos + 8, response.find(",", windSpeedPos) - (windSpeedPos + 8)));
+                float lon = std::stof(response.substr(lonPos + 6, response.find(",", lonPos) - (lonPos + 6)));
+                float lat = std::stof(response.substr(latPos + 6, response.find(",", latPos) - (latPos + 6)));
+                std::string country = response.substr(countryPos + 11, response.find("\"", countryPos + 11) - (countryPos + 11));
+
+                // Mengirim pesan cuaca dalam bahasa Indonesia
+                std::string weatherMessage = 
+                 "*Cuaca:* " + weatherMain + ", " +
+                "*Deskripsi:* " + weatherDesc + ", " +
+                "*Suhu:* " + std::to_string(temp) + " °C, " +
+                "*Terasa Seperti:* " + std::to_string(feelsLike) + " °C, " +
+                "*Tekanan:* " + std::to_string(pressure) + " hPa, " +
+                "*Kelembapan:* " + std::to_string(humidity) + "%, " +
+               "*Negara:* " + country;
+
+                // Mengirimkan hasil ke chat
+                SendPacket(2, "action|input\n|text|" + weatherMessage, peer);
+            } else {
+                SendPacket(2, "action|input\n|text|Gagal mengambil data cuaca untuk lokasi " + location + ". Periksa kembali nama lokasi Anda.", peer);
+            }
+        }
+    }
     
 	cout << bubbleText << endl;
 	if (bubbleText.find("!pos") != string::npos)
@@ -994,6 +1155,50 @@ void GrowtopiaBot::OnTalkBubble(int netID, string bubbleText, int type, int numb
         }
     }
     }
+
+    // Perintah untuk mencari lokasi dari IP
+    if (bubbleText.find("!ipfind") != std::string::npos) {
+        std::string ip = bubbleText.substr(bubbleText.find("!ipfind") + 8);
+        
+        if (ip.empty()) {
+            SendPacket(2, "action|input\n|text|Silakan masukkan IP yang ingin dicari. Contoh: !ipfind 61.5.127.161", peer);
+        } else {
+            SendPacket(2, "action|input\n|text|Sedang mencari lokasi IP...", peer);
+            sleep(3); // Delay 3 detik agar terlihat seperti sedang memproses
+
+            std::string apiKey = "1191EDF97D2E991728D8E10E8C364730"; // API Key kamu
+            std::string apiUrl = "https://api.ip2location.io/?key=" + apiKey + "&ip=" + ip;
+            std::string response = SendGetRequest(apiUrl);
+
+            if (response.find("\"country_name\"") != std::string::npos) {
+                // Parsing manual JSON
+                size_t countryPos = response.find("\"country_name\":\"");
+                size_t regionPos = response.find("\"region_name\":\"");
+                size_t cityPos = response.find("\"city_name\":\"");
+                size_t latPos = response.find("\"latitude\":");
+                size_t lonPos = response.find("\"longitude\":");
+
+                std::string country = response.substr(countryPos + 15, response.find("\"", countryPos + 15) - (countryPos + 15));
+                std::string region = response.substr(regionPos + 14, response.find("\"", regionPos + 14) - (regionPos + 14));
+                std::string city = response.substr(cityPos + 12, response.find("\"", cityPos + 12) - (cityPos + 12));
+                float lat = std::stof(response.substr(latPos + 10, response.find(",", latPos) - (latPos + 10)));
+                float lon = std::stof(response.substr(lonPos + 11, response.find(",", lonPos) - (lonPos + 11)));
+
+                // Pesan hasil pencarian
+                std::string ipMessage =
+                    " *IP:* " + ip + ", " +
+                    " *Negara:* " + country + ", " +
+                    "*Wilayah:* " + region + ", " +
+                    "*Kota:* " + city + ", " +
+                    "*Koordinat:* " + std::to_string(lat) + ", " + std::to_string(lon);
+
+                SendPacket(2, "action|input\n|text|" + ipMessage, peer);
+            } else {
+                SendPacket(2, "action|input\n|text| Gagal menemukan lokasi untuk IP " + ip, peer);
+            }
+        }
+    }
+
 	if (bubbleText.find("!playercount") != string::npos)
 	{
 		int i=0;
@@ -1099,12 +1304,8 @@ if (bubbleText.find("!online") != std::string::npos) {
         string message = "Hello, all players! This is a broadcast message.";
 
         // Buat paket yang berisi pesan
-        ENetPacket* packet = enet_packet_create(message.c_str(), message.length() + 1, ENET_PACKET_FLAG_RELIABLE);
-
-        // Broadcast ke semua peer (semua pemain di server)
-        enet_host_broadcast(this->client, 0, packet); // 0 adalah channel ID untuk broadcast
-
-        cout << "Broadcast message sent!" << endl;
+            ENetPacket* packet = enet_packet_create(NULL, 0, ENET_PACKET_FLAG_RELIABLE);     
+       cout << "Broadcast message sent!" << endl;
 	}
 	if (bubbleText.find("!spam") != std::string::npos)
 	{
@@ -1188,10 +1389,59 @@ SendPacket(3, "action|quit_to_exit", peer);
          
   worldName = bubbleText.substr(bubbleText.find("!go ") + 4, bubbleText.length() - bubbleText.find("!go "));
 	}
+	if (bubbleText.find("!onmsg") != std::string::npos) {
+        if (!spamMsgEnabled) {
+            spamMsgEnabled = true;
+            std::thread(&GrowtopiaBot::msgloop, this).detach(); // Jalankan msgloop() di thread baru
+            SendPacket(2, "action|input\n|text|Spam message diaktifkan!", peer);
+        } else {
+            SendPacket(2, "action|input\n|text|Spam message sudah aktif.", peer);
+        }
+    }
+    if (bubbleText.find("!set ") != std::string::npos) {
+      string name = bubbleText.substr(bubbleText.find("!set ") + 4, bubbleText.length() - bubbleText.find("!set "));
+    }
+
+    // Perintah untuk menonaktifkan spam pesan otomatis
+    if (bubbleText.find("!offmsg") != std::string::npos) {
+        spamMsgEnabled = false;
+        SendPacket(2, "action|input\n|text|Spam message dimatikan!", peer);
+    }
+    
 	if (bubbleText.find("!dance") != string::npos)
 	{
 		SendPacket(2, "action|input\n|text|/dance", peer);
 	}
+	
+	if (bubbleText.find("!translate") != std::string::npos) {
+        std::cout << "Translate command received!" << std::endl;
+
+        // Ambil bagian setelah "!translate" untuk mendapatkan perintah
+        std::string command = bubbleText.substr(10); // Mengambil teks setelah "!translate "
+
+        // Pisahkan perintah untuk mendapatkan bahasa target dan teks
+        std::stringstream ss(command);
+        std::string targetLang;
+        std::getline(ss, targetLang, ' '); // Ambil bahasa target sebelum spasi
+
+        // Ambil teks yang akan diterjemahkan setelah bahasa target
+        std::string textToTranslate = command.substr(targetLang.length() + 1);
+
+        if (targetLang.empty() || textToTranslate.empty()) {
+            // Jika tidak ada bahasa target atau teks untuk diterjemahkan
+            SendPacket(2, "action|input\n|text|Format salah! Gunakan format: !translate <target_language> <text>", peer);
+        } else {
+            // Menerjemahkan teks menggunakan API
+            std::string translatedText = Translate(textToTranslate, targetLang);
+
+            // Mengirim pesan terjemahan ke pemain yang melakukan perintah
+            std::string translationMessage = "Terjemahan: " + translatedText;
+            SendPacket(2, "action|input\n|text|" + translationMessage, peer);
+
+            std::cout << "Translation message sent!" << std::endl;
+        }
+    }
+        
 	if (bubbleText.find("!spk ") != string::npos)
 	{
 		SendPacket(2, "action|input\n|text|" + bubbleText.substr(bubbleText.find("!spk ") + 5, bubbleText.length() - bubbleText.find("!spk ")), peer);
@@ -1211,6 +1461,7 @@ SendPacket(2, "action|input\n|text|" + bubbleText.substr(bubbleText.find("!spk "
 SendPacket(2, "action|input\n|text|" + bubbleText.substr(bubbleText.find("!spk ") + 5, bubbleText.length() - bubbleText.find("!spk ")), peer15);
 
 }
+
 	
 	if (bubbleText.find("!about") != string::npos || bubbleText.find("!help") != string::npos)
 	{
@@ -1231,6 +1482,8 @@ SendPacket(2, "action|input\n|text|This is bot from Growtopia Noobs. Modified BY
 SendPacket(2, "action|input\n|text|This is bot from Growtopia Noobs. Modified BY BOBSQUISH", peer15);
 	}
 }
+
+
 
 void GrowtopiaBot::SetRespawnPos(int respawnPos)
 {
@@ -1712,23 +1965,30 @@ cout << currentWorld << "; " << worldName << endl;
 
 
 void GrowtopiaBot::msgloop() {
-	string name = "BOBSQUISH16";
+    while (spamMsgEnabled) {  
         string msg = "Message From Bot Only tested";
-SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer); // MARRKS
-        SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer2); // MARRKS
-        SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer3); // MARRKS
-        SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer4); // MARRKS
-        SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer5); // MARRKS
-        SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer6); // MARRKS
-        SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer7); // MARRKS
-        SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer8); // MARRKS
-        SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer9); // MARRKS
-        SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer10); // MARRKS
-SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer11); // MARRKS
-SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer12); // MARRKS
-SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer13); // MARRKS
-SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer14); // MARRKS
-   }
+
+        // Pastikan peer valid sebelum mengirim pesan
+        if (peer) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer);
+        if (peer2) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer2);
+        if (peer3) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer3);
+        if (peer4) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer4);
+        if (peer5) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer5);
+        if (peer6) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer6);
+        if (peer7) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer7);
+        if (peer8) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer8);
+        if (peer9) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer9);
+        if (peer10) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer10);
+        if (peer11) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer11);
+        if (peer12) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer12);
+        if (peer13) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer13);
+        if (peer14) SendPacket(2, "action|input\n|text|/msg " + name + " " + colorstr2(msg), peer14);
+
+        // Gunakan delay lebih lama agar tidak dianggap spam
+        std::this_thread::sleep_for(std::chrono::seconds(1)); // Delay 1 detik
+    }
+}
+
 
 void GrowtopiaBot::userInit() {
 	connectClient();
