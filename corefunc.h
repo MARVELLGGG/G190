@@ -59,8 +59,11 @@ ENetPeer *peer15;
 
 
 	ENetHost *client;
+
+
 	int login_user = 0;
-	string login_token = 0;
+std::string login_token;
+
 
 	string currentWorld;
 	int timeFromWorldEnter = 0; // in 10mss...
@@ -77,6 +80,11 @@ ENetPeer *peer15;
 int pcPlayers = 0;
 int androidPlayers = 0;
 int iosPlayers = 0;
+int maxPlayersCurrent = 0, maxPlayersLimit = 0;
+  int worldsActive = 0;
+  int serverLoad = 0;
+  bool spamMsgEnabled = false; // Variabel kontrol untuk on/off spam
+  string name;
 
 	struct ObjectData
 	{
@@ -147,7 +155,7 @@ int iosPlayers = 0;
 	void OnPlayPositioned(string sound);
 	void OnSetFreezeState(int state);
 	void OnRemove(string data);
-	void OnSpawn(string data);
+		void OnSpawn(string data);
 	void MoveBotRaw(int deltaX, int deltaY);
 	void ActivateInvisEffect();
     void InvisibleEffect(int count);
